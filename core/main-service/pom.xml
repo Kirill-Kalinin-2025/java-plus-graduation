@@ -11,7 +11,7 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>ewm-service</artifactId>
+    <artifactId>main-service</artifactId>
 
     <dependencies>
         <dependency>
