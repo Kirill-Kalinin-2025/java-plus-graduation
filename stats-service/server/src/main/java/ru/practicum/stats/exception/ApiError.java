@@ -12,4 +12,3 @@ public record ApiError(
         @JsonFormat(pattern = StatsConstants.DATE_TIME_PATTERN) LocalDateTime timestamp
 ) {
 }
-
