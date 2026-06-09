@@ -11,8 +11,8 @@ spring:
           enabled: true
           lower-case-service-id: true
       routes:
-        - id: ewm-service
-          uri: lb://ewm-service
+        - id: main-service
+          uri: lb://main-service
           predicates:
             - Path=/events/**, /categories/**, /compilations/**, /users/**, /admin/**
 
