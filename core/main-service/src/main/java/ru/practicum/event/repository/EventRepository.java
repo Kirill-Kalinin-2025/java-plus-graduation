@@ -17,11 +17,9 @@ public interface EventRepository extends JpaRepository<Event, Long> {
 
     boolean existsByCategoryId(Long categoryId);
 
-    // Поиск событий по инициатору с пагинацией
     @EntityGraph(attributePaths = {"category", "initiator"})
     Page<Event> findByInitiatorId(Long initiatorId, Pageable pageable);
 
-    // Поиск события по id и инициатору
     @EntityGraph(attributePaths = {"category", "initiator"})
     Optional<Event> findByIdAndInitiatorId(Long eventId, Long initiatorId);
 
@@ -29,11 +27,10 @@ public interface EventRepository extends JpaRepository<Event, Long> {
     @EntityGraph(attributePaths = {"category", "initiator"})
     Optional<Event> findById(Long eventId);
 
-    // Публичный поиск: только опубликованные события, с фильтрами
     @EntityGraph(attributePaths = {"category", "initiator"})
     @Query("SELECT e FROM Event e " +
-            "WHERE (:text IS NULL OR LOWER(e.annotation) LIKE LOWER(CONCAT('%', :text, '%')) " +
-            "OR LOWER(e.description) LIKE LOWER(CONCAT('%', :text, '%'))) " +
+            "WHERE (:text IS NULL OR LOWER(e.annotation) LIKE LOWER(CONCAT('%', CAST(:text AS string), '%')) " +
+            "OR LOWER(e.description) LIKE LOWER(CONCAT('%', CAST(:text AS string), '%'))) " +
             "AND (:categories IS NULL OR e.category.id IN :categories) " +
             "AND (:paid IS NULL OR e.paid = :paid) " +
             "AND (CAST(:rangeStart AS timestamp) IS NULL OR e.eventDate >= :rangeStart) " +
@@ -46,7 +43,6 @@ public interface EventRepository extends JpaRepository<Event, Long> {
                              @Param("rangeEnd") LocalDateTime rangeEnd,
                              Pageable pageable);
 
-    // Админский поиск: фильтр по пользователям, статусам, категориям, датам
     @EntityGraph(attributePaths = {"category", "initiator"})
     @Query("SELECT e FROM Event e " +
             "WHERE (:users IS NULL OR e.initiator.id IN :users) " +
