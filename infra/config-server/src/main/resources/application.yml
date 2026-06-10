@@ -10,7 +10,7 @@ spring:
     config:
       server:
         native:
-          search-locations: file:///C:/IdeaProjects/java-plus-graduation/config-repo
+          search-locations: classpath:/config
 
 eureka:
   client:
