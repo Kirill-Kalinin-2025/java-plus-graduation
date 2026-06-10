@@ -7,8 +7,11 @@ services:
     image: postgres:16.1
 
   main-service:
-    ports:
-      - "8080:8080"
+    image: main-service
 
   main-db:
     image: postgres:16.1
+
+  gateway-server:
+    ports:
+      - "8080:8080"
