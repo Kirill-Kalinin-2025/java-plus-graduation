@@ -39,12 +39,6 @@
 		<module>stats-service</module>
 		<module>infra</module>
 		<module>core</module>
-		<module>core/common</module>
-		<module>core/request-service</module>
-		<module>core/user-service</module>
-		<module>core/compilation-service</module>
-		<module>core/comment-service</module>
-		<module>core/category-service</module>
 	</modules>
 
 	<build>
