@@ -7,7 +7,7 @@ import org.springframework.cloud.openfeign.EnableFeignClients;
 
 @SpringBootApplication
 @EnableDiscoveryClient
-@EnableFeignClients
+@EnableFeignClients(basePackages = "ru.practicum.event.client")
 public class CompilationServiceApplication {
     public static void main(String[] args) {
         SpringApplication.run(CompilationServiceApplication.class, args);
