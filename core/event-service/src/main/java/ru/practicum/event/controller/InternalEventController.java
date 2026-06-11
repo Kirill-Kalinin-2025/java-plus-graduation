@@ -37,7 +37,7 @@ public class InternalEventController {
     @GetMapping("/{eventId}/initiator/{userId}")
     public Boolean isInitiator(@PathVariable Long eventId, @PathVariable Long userId) {
         return eventRepository.findById(eventId)
-                .map(event -> event.getInitiator().getId().equals(userId))
+                .map(event -> event.getInitiatorId().equals(userId))
                 .orElse(false);
     }
 

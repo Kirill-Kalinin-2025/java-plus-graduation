@@ -6,8 +6,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import ru.practicum.category.model.Category;
-import ru.practicum.category.repository.CategoryRepository;
+import ru.practicum.category.client.CategoryClient;
+import ru.practicum.category.dto.CategoryDto;
 import ru.practicum.event.dto.*;
 import ru.practicum.event.enums.EventState;
 import ru.practicum.event.mapper.EventMapper;
@@ -16,12 +16,11 @@ import ru.practicum.event.repository.EventRepository;
 import ru.practicum.exception.BadRequestException;
 import ru.practicum.exception.ConflictException;
 import ru.practicum.exception.NotFoundException;
-import ru.practicum.request.repository.RequestRepository;
-import ru.practicum.request.model.RequestStatus;
+import ru.practicum.request.client.RequestClient;
 import ru.practicum.stats.client.StatsClient;
 import ru.practicum.stats.dto.ViewStatsDto;
-import ru.practicum.user.model.User;
-import ru.practicum.user.repository.UserRepository;
+import ru.practicum.user.client.UserClient;
+import ru.practicum.user.dto.UserDto;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -34,13 +33,11 @@ import java.util.stream.Collectors;
 public class EventService {
 
     private final EventRepository eventRepository;
-    private final UserRepository userRepository;
-    private final CategoryRepository categoryRepository;
+    private final UserClient userClient;
+    private final CategoryClient categoryClient;
     private final StatsClient statsClient;
-    private final RequestRepository requestRepository;
+    private final RequestClient requestClient;
     private final EventMapper eventMapper;
-
-    // ==================== PRIVATE API ====================
 
     @Transactional
     public EventFullDto create(Long userId, NewEventDto dto) {
@@ -48,15 +45,19 @@ public class EventService {
             throw new BadRequestException("Дата события должна быть не ранее чем через 2 часа от текущего момента");
         }
 
-        User initiator = userRepository.findById(userId)
-                .orElseThrow(() -> new NotFoundException("Пользователь с id=" + userId + " не найден"));
+        UserDto initiator = userClient.getUser(userId);
+        if (initiator == null) {
+            throw new NotFoundException("Пользователь с id=" + userId + " не найден");
+        }
 
-        Category category = categoryRepository.findById(dto.getCategory())
-                .orElseThrow(() -> new NotFoundException("Категория с id=" + dto.getCategory() + " не найдена"));
+        CategoryDto category = categoryClient.getCategory(dto.getCategory());
+        if (category == null) {
+            throw new NotFoundException("Категория с id=" + dto.getCategory() + " не найдена");
+        }
 
         Event event = new Event();
         event.setAnnotation(dto.getAnnotation());
-        event.setCategory(category);
+        event.setCategoryId(category.getId());
         event.setDescription(dto.getDescription());
         event.setEventDate(dto.getEventDate());
         event.setLocation(dto.getLocation());
@@ -64,7 +65,7 @@ public class EventService {
         event.setParticipantLimit(dto.getParticipantLimit() != null ? dto.getParticipantLimit() : 0);
         event.setRequestModeration(dto.getRequestModeration() != null ? dto.getRequestModeration() : true);
         event.setTitle(dto.getTitle());
-        event.setInitiator(initiator);
+        event.setInitiatorId(userId);
         event.setState(EventState.PENDING);
         event.setCreatedOn(LocalDateTime.now());
 
@@ -77,7 +78,7 @@ public class EventService {
         return eventRepository.findByInitiatorId(userId, pageable)
                 .stream()
                 .map(event -> {
-                    Long confirmed = requestRepository.countByEventIdAndStatus(event.getId(), RequestStatus.CONFIRMED);
+                    Long confirmed = requestClient.countByEventIdAndStatus(event.getId(), "CONFIRMED");
                     return eventMapper.toShortDto(event, confirmed, event.getViews());
                 })
                 .collect(Collectors.toList());
@@ -87,7 +88,7 @@ public class EventService {
         Event event = eventRepository.findByIdAndInitiatorId(eventId, userId)
                 .orElseThrow(() -> new NotFoundException(
                         "Событие с id=" + eventId + " не найдено у пользователя с id=" + userId));
-        Long confirmed = requestRepository.countByEventIdAndStatus(event.getId(), RequestStatus.CONFIRMED);
+        Long confirmed = requestClient.countByEventIdAndStatus(event.getId(), "CONFIRMED");
         return eventMapper.toFullDto(event, confirmed, event.getViews());
     }
 
@@ -103,9 +104,11 @@ public class EventService {
 
         if (dto.getAnnotation() != null) event.setAnnotation(dto.getAnnotation());
         if (dto.getCategory() != null) {
-            Category category = categoryRepository.findById(dto.getCategory())
-                    .orElseThrow(() -> new NotFoundException("Категория с id=" + dto.getCategory() + " не найдена"));
-            event.setCategory(category);
+            CategoryDto category = categoryClient.getCategory(dto.getCategory());
+            if (category == null) {
+                throw new NotFoundException("Категория с id=" + dto.getCategory() + " не найдена");
+            }
+            event.setCategoryId(category.getId());
         }
         if (dto.getDescription() != null) event.setDescription(dto.getDescription());
         if (dto.getEventDate() != null) {
@@ -129,11 +132,9 @@ public class EventService {
         }
 
         Event saved = eventRepository.save(event);
-        Long confirmed = requestRepository.countByEventIdAndStatus(saved.getId(), RequestStatus.CONFIRMED);
+        Long confirmed = requestClient.countByEventIdAndStatus(saved.getId(), "CONFIRMED");
         return eventMapper.toFullDto(saved, confirmed, saved.getViews());
     }
-
-    // ==================== PUBLIC API ====================
 
     public List<EventShortDto> searchPublic(String text, List<Long> categories, Boolean paid,
                                             LocalDateTime rangeStart, LocalDateTime rangeEnd,
@@ -147,15 +148,13 @@ public class EventService {
             throw new BadRequestException("Дата начала диапазона не может быть позже даты конца");
         }
 
-        Page<Event> eventPage = eventRepository.searchPublic(text, categories, paid,
-                rangeStart, rangeEnd, pageable);
-
+        Page<Event> eventPage = eventRepository.searchPublic(text, categories, paid, rangeStart, rangeEnd, pageable);
         List<Event> events = eventPage.getContent();
         enrichEventsWithViews(events);
 
         return events.stream()
                 .map(event -> {
-                    Long confirmed = requestRepository.countByEventIdAndStatus(event.getId(), RequestStatus.CONFIRMED);
+                    Long confirmed = requestClient.countByEventIdAndStatus(event.getId(), "CONFIRMED");
                     return eventMapper.toShortDto(event, confirmed, event.getViews());
                 })
                 .collect(Collectors.toList());
@@ -170,11 +169,9 @@ public class EventService {
         }
 
         enrichEventsWithViews(List.of(event));
-        Long confirmed = requestRepository.countByEventIdAndStatus(event.getId(), RequestStatus.CONFIRMED);
+        Long confirmed = requestClient.countByEventIdAndStatus(event.getId(), "CONFIRMED");
         return eventMapper.toFullDto(event, confirmed, event.getViews());
     }
-
-    // ==================== ADMIN API ====================
 
     public List<EventFullDto> searchAdmin(List<Long> users, List<EventState> states, List<Long> categories,
                                           LocalDateTime rangeStart, LocalDateTime rangeEnd,
@@ -187,7 +184,7 @@ public class EventService {
         return eventRepository.searchAdmin(users, states, categories, rangeStart, rangeEnd, pageable)
                 .stream()
                 .map(event -> {
-                    Long confirmed = requestRepository.countByEventIdAndStatus(event.getId(), RequestStatus.CONFIRMED);
+                    Long confirmed = requestClient.countByEventIdAndStatus(event.getId(), "CONFIRMED");
                     return eventMapper.toFullDto(event, confirmed, event.getViews());
                 })
                 .collect(Collectors.toList());
@@ -200,9 +197,11 @@ public class EventService {
 
         if (dto.getAnnotation() != null) event.setAnnotation(dto.getAnnotation());
         if (dto.getCategory() != null) {
-            Category category = categoryRepository.findById(dto.getCategory())
-                    .orElseThrow(() -> new NotFoundException("Категория с id=" + dto.getCategory() + " не найдена"));
-            event.setCategory(category);
+            CategoryDto category = categoryClient.getCategory(dto.getCategory());
+            if (category == null) {
+                throw new NotFoundException("Категория с id=" + dto.getCategory() + " не найдена");
+            }
+            event.setCategoryId(category.getId());
         }
         if (dto.getDescription() != null) event.setDescription(dto.getDescription());
         if (dto.getEventDate() != null) {
@@ -233,11 +232,9 @@ public class EventService {
         }
 
         Event saved = eventRepository.save(event);
-        Long confirmed = requestRepository.countByEventIdAndStatus(saved.getId(), RequestStatus.CONFIRMED);
+        Long confirmed = requestClient.countByEventIdAndStatus(saved.getId(), "CONFIRMED");
         return eventMapper.toFullDto(saved, confirmed, saved.getViews());
     }
-
-    // ==================== Статистика ====================
 
     private void enrichEventsWithViews(List<Event> events) {
         if (events.isEmpty()) return;
