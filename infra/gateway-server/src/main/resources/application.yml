@@ -14,7 +14,7 @@ spring:
         - id: event-service
           uri: lb://event-service
           predicates:
-            - Path=/events/**, /admin/events/**
+            - Path=/events/**, /admin/events/**, /users/*/events/**
         - id: category-service
           uri: lb://category-service
           predicates:
@@ -34,7 +34,7 @@ spring:
         - id: request-service
           uri: lb://request-service
           predicates:
-            - Path=/users/*/requests/**, /users/*/events/*/requests/**
+            - Path=/users/*/requests, /users/*/requests/**, /users/*/events/*/requests, /users/*/events/*/requests/**
 
 eureka:
   client:

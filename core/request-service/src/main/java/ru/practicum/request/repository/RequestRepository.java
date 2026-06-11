@@ -22,7 +22,7 @@ public interface RequestRepository extends JpaRepository<ParticipationRequest, L
     long countByEventIdAndStatus(Long eventId, RequestStatus status);
 
     @Query("SELECT r FROM ParticipationRequest r " +
-            "WHERE r.event.id = :eventId AND r.status = :status")
+            "WHERE r.eventId = :eventId AND r.status = :status")
     List<ParticipationRequest> findByEventIdAndStatus(@Param("eventId") Long eventId,
                                                       @Param("status") RequestStatus status);
 }
