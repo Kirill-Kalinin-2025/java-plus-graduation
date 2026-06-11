@@ -36,11 +36,4 @@ public class UserController {
     public void delete(@PathVariable Long userId) {
         userService.delete(userId);
     }
-
-    @GetMapping("/internal/users/{userId}/name")
-    public String getUserName(@PathVariable Long userId) {
-        return userRepository.findById(userId)
-                .map(user -> user.getName())
-                .orElse(null);
-    }
 }
