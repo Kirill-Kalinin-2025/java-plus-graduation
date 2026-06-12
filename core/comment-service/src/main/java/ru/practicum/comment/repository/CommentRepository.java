@@ -19,10 +19,10 @@ public interface CommentRepository extends JpaRepository<Comment, Long> {
     List<Comment> findAllByAuthorId(Long userId, Pageable pageable);
 
     @Query("SELECT c FROM Comment c " +
-            "WHERE (:users IS NULL OR c.author.id IN :users) " +
+            "WHERE (:users IS NULL OR c.authorId IN :users) " +
             "AND (:text IS NULL OR LOWER(c.text) LIKE LOWER(CONCAT('%', :text, '%'))) " +
-            "AND (:rangeStart IS NULL OR c.created >= :rangeStart) " +
-            "AND (:rangeEnd IS NULL OR c.created <= :rangeEnd) ")
+            "AND (CAST(:rangeStart AS timestamp) IS NULL OR c.created >= :rangeStart) " +
+            "AND (CAST(:rangeEnd AS timestamp) IS NULL OR c.created <= :rangeEnd) ")
     Page<Comment> searchAdmin(@Param("users") List<Long> users,
                               @Param("text") String text,
                               @Param("rangeStart") LocalDateTime rangeStart,
