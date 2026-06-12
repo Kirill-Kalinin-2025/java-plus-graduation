@@ -2,6 +2,16 @@ server:
   port: 0
 
 spring:
+  cloud:
+    openfeign:
+      httpclient:
+        hc5:
+          enabled: true
+      client:
+        config:
+          default:
+            connect-timeout: 5000
+            read-timeout: 5000
   datasource:
     driverClassName: ${SPRING_DATASOURCE_DRIVER_CLASS_NAME:org.postgresql.Driver}
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/ewm}

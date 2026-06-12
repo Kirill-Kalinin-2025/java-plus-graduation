@@ -2,6 +2,11 @@ server:
   port: 0
 
 spring:
+  cloud:
+    openfeign:
+      httpclient:
+        hc5:
+          enabled: true
   datasource:
     driverClassName: ${SPRING_DATASOURCE_DRIVER_CLASS_NAME:org.postgresql.Driver}
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/ewm}
