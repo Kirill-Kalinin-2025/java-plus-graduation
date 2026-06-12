@@ -17,7 +17,7 @@ public class RequestClientFallback implements RequestClient {
     }
 
     @Override
-    public EventRequestStatusUpdateResult updateRequestsStatus(Long userId, Long eventId,
+    public EventRequestStatusUpdateResult updateRequestsStatus(Long eventId,
                                                                EventRequestStatusUpdateRequest request) {
         return new EventRequestStatusUpdateResult(Collections.emptyList(), Collections.emptyList());
     }

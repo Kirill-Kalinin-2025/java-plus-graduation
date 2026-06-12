@@ -20,20 +20,19 @@ public class InternalRequestController {
     private final RequestRepository requestRepository;
 
     @GetMapping("/event/{eventId}")
-    public List<ParticipationRequestDto> getEventRequests(@RequestParam Long userId,
+    public List<ParticipationRequestDto> getEventRequests(@RequestParam("userId") Long userId,
                                                           @PathVariable Long eventId) {
         return requestService.getEventRequests(userId, eventId);
     }
 
     @PatchMapping("/event/{eventId}/status")
-    public EventRequestStatusUpdateResult updateRequestsStatus(@RequestParam Long userId,
-                                                               @PathVariable Long eventId,
+    public EventRequestStatusUpdateResult updateRequestsStatus(@PathVariable Long eventId,
                                                                @RequestBody EventRequestStatusUpdateRequest request) {
-        return requestService.updateRequestsStatus(userId, eventId, request);
+        return requestService.updateRequestsStatus(request.getUserId(), eventId, request);
     }
 
     @GetMapping("/event/{eventId}/count")
-    public Long countByEventIdAndStatus(@PathVariable Long eventId, @RequestParam String status) {
+    public Long countByEventIdAndStatus(@PathVariable Long eventId, @RequestParam("status") String status) {
         return requestRepository.countByEventIdAndStatus(eventId, RequestStatus.valueOf(status));
     }
 }
