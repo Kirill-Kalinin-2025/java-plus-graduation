@@ -1,7 +1,9 @@
 package ru.practicum.exception;
 
+import feign.FeignException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -89,6 +91,18 @@ public class ErrorHandler {
                 "message", e.getMostSpecificCause() != null ? e.getMostSpecificCause().getMessage() : "Нарушение целостности данных",
                 "timestamp", LocalDateTime.now().toString()
         );
+    }
+
+    @ExceptionHandler(FeignException.class)
+    public ResponseEntity<Map<String, String>> handleFeignException(FeignException e) {
+        HttpStatus status = HttpStatus.valueOf(e.status());
+        Map<String, String> body = Map.of(
+                "status", status.name(),
+                "reason", status == HttpStatus.CONFLICT ? "Integrity constraint has been violated." : "Internal server error.",
+                "message", e.contentUTF8(),
+                "timestamp", LocalDateTime.now().toString()
+        );
+        return new ResponseEntity<>(body, status);
     }
 
     @ExceptionHandler(Exception.class)
