@@ -38,3 +38,27 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+
+  collector:
+    build:
+      context: .
+      dockerfile: stats-service/collector/Dockerfile
+    depends_on:
+      - kafka
+      - discovery-server
+
+  aggregator:
+    build:
+      context: .
+      dockerfile: stats-service/aggregator/Dockerfile
+    depends_on:
+      - kafka
+      - discovery-server
+
+  analyzer:
+    build:
+      context: .
+      dockerfile: stats-service/analyzer/Dockerfile
+    depends_on:
+      - kafka
+      - discovery-server
