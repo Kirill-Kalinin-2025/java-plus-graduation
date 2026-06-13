@@ -1,7 +1,12 @@
 package ru.practicum.collector.config;
 
+import io.confluent.kafka.schemaregistry.client.MockSchemaRegistryClient;
+import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
 import io.confluent.kafka.serializers.KafkaAvroSerializer;
+import jakarta.annotation.PostConstruct;
+import org.apache.avro.Schema;
 import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.common.serialization.Serializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -20,8 +25,18 @@ public class KafkaConfig {
     @Value("${spring.kafka.bootstrap-servers:localhost:9092}")
     private String bootstrapServers;
 
-    @Value("${spring.kafka.producer.properties.schema.registry.url:mock://test}")
-    private String schemaRegistryUrl;
+    private final MockSchemaRegistryClient schemaRegistryClient = new MockSchemaRegistryClient();
+
+    @PostConstruct
+    public void registerSchemas() throws Exception {
+        Schema userActionSchema = UserActionAvro.getClassSchema();
+        schemaRegistryClient.register("stats.user-actions.v1-value", userActionSchema);
+    }
+
+    @Bean
+    public SchemaRegistryClient schemaRegistryClient() {
+        return schemaRegistryClient;
+    }
 
     @Bean
     public ProducerFactory<String, UserActionAvro> producerFactory() {
@@ -29,8 +44,17 @@ public class KafkaConfig {
         props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, KafkaAvroSerializer.class);
-        props.put("schema.registry.url", schemaRegistryUrl);
-        return new DefaultKafkaProducerFactory<>(props);
+        props.put(ProducerConfig.RETRIES_CONFIG, 3);
+        props.put(ProducerConfig.ACKS_CONFIG, "all");
+
+        DefaultKafkaProducerFactory<String, UserActionAvro> factory =
+                new DefaultKafkaProducerFactory<>(props);
+        factory.setValueSerializerSupplier(() -> {
+            Serializer<UserActionAvro> serializer = (Serializer) new KafkaAvroSerializer(schemaRegistryClient);
+            serializer.configure(props, false);
+            return serializer;
+        });
+        return factory;
     }
 
     @Bean

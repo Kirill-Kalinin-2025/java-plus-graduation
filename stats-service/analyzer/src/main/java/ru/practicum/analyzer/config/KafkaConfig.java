@@ -1,7 +1,12 @@
 package ru.practicum.analyzer.config;
 
+import io.confluent.kafka.schemaregistry.client.MockSchemaRegistryClient;
+import io.confluent.kafka.schemaregistry.client.SchemaRegistryClient;
 import io.confluent.kafka.serializers.KafkaAvroDeserializer;
+import jakarta.annotation.PostConstruct;
+import org.apache.avro.Schema;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -21,8 +26,21 @@ public class KafkaConfig {
     @Value("${spring.kafka.bootstrap-servers:localhost:9092}")
     private String bootstrapServers;
 
-    @Value("${spring.kafka.consumer.properties.schema.registry.url:mock://test}")
-    private String schemaRegistryUrl;
+    private final MockSchemaRegistryClient schemaRegistryClient = new MockSchemaRegistryClient();
+
+    @PostConstruct
+    public void registerSchemas() throws Exception {
+        Schema userActionSchema = UserActionAvro.getClassSchema();
+        schemaRegistryClient.register("stats.user-actions.v1-value", userActionSchema);
+
+        Schema eventSimilaritySchema = EventSimilarityAvro.getClassSchema();
+        schemaRegistryClient.register("stats.events-similarity.v1-value", eventSimilaritySchema);
+    }
+
+    @Bean
+    public SchemaRegistryClient schemaRegistryClient() {
+        return schemaRegistryClient;
+    }
 
     @Bean
     public ConsumerFactory<String, UserActionAvro> userActionConsumerFactory() {
@@ -31,9 +49,16 @@ public class KafkaConfig {
         props.put(ConsumerConfig.GROUP_ID_CONFIG, "analyzer-user-actions");
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, KafkaAvroDeserializer.class);
-        props.put("schema.registry.url", schemaRegistryUrl);
         props.put("specific.avro.reader", true);
-        return new DefaultKafkaConsumerFactory<>(props);
+
+        DefaultKafkaConsumerFactory<String, UserActionAvro> factory =
+                new DefaultKafkaConsumerFactory<>(props);
+        factory.setValueDeserializerSupplier(() -> {
+            Deserializer<UserActionAvro> deserializer = (Deserializer) new KafkaAvroDeserializer(schemaRegistryClient);
+            deserializer.configure(props, false);
+            return deserializer;
+        });
+        return factory;
     }
 
     @Bean
@@ -51,9 +76,16 @@ public class KafkaConfig {
         props.put(ConsumerConfig.GROUP_ID_CONFIG, "analyzer-similarity");
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, KafkaAvroDeserializer.class);
-        props.put("schema.registry.url", schemaRegistryUrl);
         props.put("specific.avro.reader", true);
-        return new DefaultKafkaConsumerFactory<>(props);
+
+        DefaultKafkaConsumerFactory<String, EventSimilarityAvro> factory =
+                new DefaultKafkaConsumerFactory<>(props);
+        factory.setValueDeserializerSupplier(() -> {
+            Deserializer<EventSimilarityAvro> deserializer = (Deserializer) new KafkaAvroDeserializer(schemaRegistryClient);
+            deserializer.configure(props, false);
+            return deserializer;
+        });
+        return factory;
     }
 
     @Bean
