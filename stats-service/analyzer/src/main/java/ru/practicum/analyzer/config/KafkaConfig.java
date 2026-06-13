@@ -21,7 +21,7 @@ public class KafkaConfig {
     @Value("${spring.kafka.bootstrap-servers:localhost:9092}")
     private String bootstrapServers;
 
-    @Value("${spring.kafka.consumer.properties.schema.registry.url:http://localhost:8082}")
+    @Value("${spring.kafka.consumer.properties.schema.registry.url:http://localhost:8081}")
     private String schemaRegistryUrl;
 
     @Bean
