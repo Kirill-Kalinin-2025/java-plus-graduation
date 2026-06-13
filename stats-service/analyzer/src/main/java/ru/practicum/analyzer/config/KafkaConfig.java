@@ -50,13 +50,14 @@ public class KafkaConfig {
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, KafkaAvroDeserializer.class);
         props.put("specific.avro.reader", true);
+        props.put("schema.registry.url", "mock://test");
 
         DefaultKafkaConsumerFactory<String, UserActionAvro> factory =
                 new DefaultKafkaConsumerFactory<>(props);
         factory.setValueDeserializerSupplier(() -> {
-            Deserializer<UserActionAvro> deserializer = (Deserializer) new KafkaAvroDeserializer(schemaRegistryClient);
+            KafkaAvroDeserializer deserializer = new KafkaAvroDeserializer(schemaRegistryClient);
             deserializer.configure(props, false);
-            return deserializer;
+            return (Deserializer) deserializer;
         });
         return factory;
     }
@@ -77,13 +78,14 @@ public class KafkaConfig {
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, KafkaAvroDeserializer.class);
         props.put("specific.avro.reader", true);
+        props.put("schema.registry.url", "mock://test");
 
         DefaultKafkaConsumerFactory<String, EventSimilarityAvro> factory =
                 new DefaultKafkaConsumerFactory<>(props);
         factory.setValueDeserializerSupplier(() -> {
-            Deserializer<EventSimilarityAvro> deserializer = (Deserializer) new KafkaAvroDeserializer(schemaRegistryClient);
+            KafkaAvroDeserializer deserializer = new KafkaAvroDeserializer(schemaRegistryClient);
             deserializer.configure(props, false);
-            return deserializer;
+            return (Deserializer) deserializer;
         });
         return factory;
     }

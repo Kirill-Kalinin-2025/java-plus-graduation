@@ -55,13 +55,14 @@ public class KafkaConfig {
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, true);
         props.put("specific.avro.reader", true);
+        props.put("schema.registry.url", "mock://test");
 
         DefaultKafkaConsumerFactory<String, UserActionAvro> factory =
                 new DefaultKafkaConsumerFactory<>(props);
         factory.setValueDeserializerSupplier(() -> {
-            Deserializer<UserActionAvro> deserializer = (Deserializer) new KafkaAvroDeserializer(schemaRegistryClient);
+            KafkaAvroDeserializer deserializer = new KafkaAvroDeserializer(schemaRegistryClient);
             deserializer.configure(props, false);
-            return deserializer;
+            return (Deserializer) deserializer;
         });
         return factory;
     }
@@ -80,13 +81,14 @@ public class KafkaConfig {
         props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, KafkaAvroSerializer.class);
+        props.put("schema.registry.url", "mock://test");
 
         DefaultKafkaProducerFactory<String, EventSimilarityAvro> factory =
                 new DefaultKafkaProducerFactory<>(props);
         factory.setValueSerializerSupplier(() -> {
-            Serializer<EventSimilarityAvro> serializer = (Serializer) new KafkaAvroSerializer(schemaRegistryClient);
+            KafkaAvroSerializer serializer = new KafkaAvroSerializer(schemaRegistryClient);
             serializer.configure(props, false);
-            return serializer;
+            return (Serializer) serializer;
         });
         return factory;
     }

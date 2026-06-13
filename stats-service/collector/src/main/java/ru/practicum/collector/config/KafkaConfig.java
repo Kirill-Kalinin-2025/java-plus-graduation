@@ -46,13 +46,14 @@ public class KafkaConfig {
         props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, KafkaAvroSerializer.class);
         props.put(ProducerConfig.RETRIES_CONFIG, 3);
         props.put(ProducerConfig.ACKS_CONFIG, "all");
+        props.put("schema.registry.url", "mock://test");
 
         DefaultKafkaProducerFactory<String, UserActionAvro> factory =
                 new DefaultKafkaProducerFactory<>(props);
         factory.setValueSerializerSupplier(() -> {
-            Serializer<UserActionAvro> serializer = (Serializer) new KafkaAvroSerializer(schemaRegistryClient);
+            KafkaAvroSerializer serializer = new KafkaAvroSerializer(schemaRegistryClient);
             serializer.configure(props, false);
-            return serializer;
+            return (Serializer) serializer;
         });
         return factory;
     }
