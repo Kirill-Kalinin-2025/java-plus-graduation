@@ -39,11 +39,24 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
 
-  # Добавляем сервис для создания топиков при старте
+  # Добавляем Schema Registry
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.4.4
+    depends_on:
+      - kafka
+    ports:
+      - "8082:8082"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://localhost:9092
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8082
+
+  # Сервис для создания топиков (исправленный)
   kafka-init:
     image: confluentinc/cp-kafka:7.4.4
     depends_on:
       - kafka
+      - schema-registry
     entrypoint: /bin/sh -c "
       echo 'Waiting for Kafka to be ready...';
       sleep 10;
@@ -59,8 +72,13 @@ services:
       dockerfile: stats-service/collector/Dockerfile
     depends_on:
       - kafka
+      - schema-registry
       - discovery-server
       - kafka-init
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - SCHEMA_REGISTRY_URL=http://schema-registry:8082
+      - DISCOVERY_HOST=discovery-server
 
   aggregator:
     build:
@@ -68,8 +86,13 @@ services:
       dockerfile: stats-service/aggregator/Dockerfile
     depends_on:
       - kafka
+      - schema-registry
       - discovery-server
       - kafka-init
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - SCHEMA_REGISTRY_URL=http://schema-registry:8082
+      - DISCOVERY_HOST=discovery-server
 
   analyzer:
     build:
@@ -77,5 +100,11 @@ services:
       dockerfile: stats-service/analyzer/Dockerfile
     depends_on:
       - kafka
+      - schema-registry
       - discovery-server
       - kafka-init
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - SCHEMA_REGISTRY_URL=http://schema-registry:8082
+      - DISCOVERY_HOST=discovery-server
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://analyzer-db:5432/analyzer
