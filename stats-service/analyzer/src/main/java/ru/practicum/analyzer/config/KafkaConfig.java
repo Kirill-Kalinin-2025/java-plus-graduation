@@ -24,7 +24,7 @@ public class KafkaConfig {
         props.put(ConsumerConfig.GROUP_ID_CONFIG, "analyzer-user-actions");
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, KafkaAvroDeserializer.class);
-        props.put("schema.registry.url", "http://localhost:8081");
+        props.put("specific.avro.reader", true);
         return new DefaultKafkaConsumerFactory<>(props);
     }
 
@@ -42,7 +42,7 @@ public class KafkaConfig {
         props.put(ConsumerConfig.GROUP_ID_CONFIG, "analyzer-similarity");
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, KafkaAvroDeserializer.class);
-        props.put("schema.registry.url", "http://localhost:8081");
+        props.put("specific.avro.reader", true);
         return new DefaultKafkaConsumerFactory<>(props);
     }
 
