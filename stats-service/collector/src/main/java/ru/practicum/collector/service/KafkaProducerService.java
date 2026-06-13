@@ -1,5 +1,6 @@
 package ru.practicum.collector.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -15,7 +16,8 @@ import java.time.Instant;
 @RequiredArgsConstructor
 public class KafkaProducerService {
 
-    private final KafkaTemplate<String, UserActionAvro> kafkaTemplate;
+    private final KafkaTemplate<String, String> kafkaTemplate;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     private static final String TOPIC = "stats.user-actions.v1";
 
@@ -29,8 +31,9 @@ public class KafkaProducerService {
                             proto.getTimestamp().getSeconds() * 1000 + proto.getTimestamp().getNanos() / 1_000_000))
                     .build();
 
-            kafkaTemplate.send(TOPIC, avro);
-            log.info("Sent UserActionAvro to topic {}: {}", TOPIC, avro);
+            String json = objectMapper.writeValueAsString(avro);
+            kafkaTemplate.send(TOPIC, String.valueOf(avro.getUserId()), json);
+            log.info("Sent UserActionAvro to topic {}: {}", TOPIC, json);
         } catch (Exception e) {
             log.error("Failed to send UserActionAvro to Kafka: {}", e.getMessage());
         }
