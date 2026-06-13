@@ -20,16 +20,20 @@ public class KafkaProducerService {
     private static final String TOPIC = "stats.user-actions.v1";
 
     public void sendUserAction(UserActionProto proto) {
-        UserActionAvro avro = UserActionAvro.newBuilder()
-                .setUserId(proto.getUserId())
-                .setEventId(proto.getEventId())
-                .setActionType(mapActionType(proto.getActionType()))
-                .setTimestamp(Instant.ofEpochMilli(
-                        proto.getTimestamp().getSeconds() * 1000 + proto.getTimestamp().getNanos() / 1_000_000))
-                .build();
+        try {
+            UserActionAvro avro = UserActionAvro.newBuilder()
+                    .setUserId(proto.getUserId())
+                    .setEventId(proto.getEventId())
+                    .setActionType(mapActionType(proto.getActionType()))
+                    .setTimestamp(Instant.ofEpochMilli(
+                            proto.getTimestamp().getSeconds() * 1000 + proto.getTimestamp().getNanos() / 1_000_000))
+                    .build();
 
-        kafkaTemplate.send(TOPIC, avro);
-        log.info("Sent UserActionAvro to topic {}: {}", TOPIC, avro);
+            kafkaTemplate.send(TOPIC, avro);
+            log.info("Sent UserActionAvro to topic {}: {}", TOPIC, avro);
+        } catch (Exception e) {
+            log.error("Failed to send UserActionAvro to Kafka: {}", e.getMessage());
+        }
     }
 
     private ActionTypeAvro mapActionType(ru.practicum.ewm.stats.proto.ActionTypeProto protoType) {
