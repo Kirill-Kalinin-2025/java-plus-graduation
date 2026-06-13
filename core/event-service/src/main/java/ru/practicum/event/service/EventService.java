@@ -17,14 +17,11 @@ import ru.practicum.exception.BadRequestException;
 import ru.practicum.exception.ConflictException;
 import ru.practicum.exception.NotFoundException;
 import ru.practicum.request.client.RequestClient;
-import ru.practicum.stats.client.StatsClient;
-import ru.practicum.stats.dto.ViewStatsDto;
 import ru.practicum.user.client.UserClient;
 import ru.practicum.user.dto.UserDto;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -35,7 +32,6 @@ public class EventService {
     private final EventRepository eventRepository;
     private final UserClient userClient;
     private final CategoryClient categoryClient;
-    private final StatsClient statsClient;
     private final RequestClient requestClient;
     private final EventMapper eventMapper;
 
@@ -70,7 +66,7 @@ public class EventService {
         event.setCreatedOn(LocalDateTime.now());
 
         Event saved = eventRepository.save(event);
-        return eventMapper.toFullDto(saved, 0L, 0L);
+        return eventMapper.toFullDto(saved, 0L, 0.0);
     }
 
     public List<EventShortDto> getByUser(Long userId, int from, int size) {
@@ -79,7 +75,7 @@ public class EventService {
                 .stream()
                 .map(event -> {
                     Long confirmed = requestClient.countByEventIdAndStatus(event.getId(), "CONFIRMED");
-                    return eventMapper.toShortDto(event, confirmed, event.getViews());
+                    return eventMapper.toShortDto(event, confirmed, event.getRating());
                 })
                 .collect(Collectors.toList());
     }
@@ -89,7 +85,7 @@ public class EventService {
                 .orElseThrow(() -> new NotFoundException(
                         "Событие с id=" + eventId + " не найдено у пользователя с id=" + userId));
         Long confirmed = requestClient.countByEventIdAndStatus(event.getId(), "CONFIRMED");
-        return eventMapper.toFullDto(event, confirmed, event.getViews());
+        return eventMapper.toFullDto(event, confirmed, event.getRating());
     }
 
     @Transactional
@@ -133,7 +129,7 @@ public class EventService {
 
         Event saved = eventRepository.save(event);
         Long confirmed = requestClient.countByEventIdAndStatus(saved.getId(), "CONFIRMED");
-        return eventMapper.toFullDto(saved, confirmed, saved.getViews());
+        return eventMapper.toFullDto(saved, confirmed, saved.getRating());
     }
 
     public List<EventShortDto> searchPublic(String text, List<Long> categories, Boolean paid,
@@ -150,12 +146,11 @@ public class EventService {
 
         Page<Event> eventPage = eventRepository.searchPublic(text, categories, paid, rangeStart, rangeEnd, pageable);
         List<Event> events = eventPage.getContent();
-        enrichEventsWithViews(events);
 
         return events.stream()
                 .map(event -> {
                     Long confirmed = requestClient.countByEventIdAndStatus(event.getId(), "CONFIRMED");
-                    return eventMapper.toShortDto(event, confirmed, event.getViews());
+                    return eventMapper.toShortDto(event, confirmed, event.getRating());
                 })
                 .collect(Collectors.toList());
     }
@@ -168,9 +163,8 @@ public class EventService {
             throw new NotFoundException("Событие с id=" + eventId + " не найдено");
         }
 
-        enrichEventsWithViews(List.of(event));
         Long confirmed = requestClient.countByEventIdAndStatus(event.getId(), "CONFIRMED");
-        return eventMapper.toFullDto(event, confirmed, event.getViews());
+        return eventMapper.toFullDto(event, confirmed, event.getRating());
     }
 
     public List<EventFullDto> searchAdmin(List<Long> users, List<EventState> states, List<Long> categories,
@@ -185,7 +179,7 @@ public class EventService {
                 .stream()
                 .map(event -> {
                     Long confirmed = requestClient.countByEventIdAndStatus(event.getId(), "CONFIRMED");
-                    return eventMapper.toFullDto(event, confirmed, event.getViews());
+                    return eventMapper.toFullDto(event, confirmed, event.getRating());
                 })
                 .collect(Collectors.toList());
     }
@@ -233,37 +227,6 @@ public class EventService {
 
         Event saved = eventRepository.save(event);
         Long confirmed = requestClient.countByEventIdAndStatus(saved.getId(), "CONFIRMED");
-        return eventMapper.toFullDto(saved, confirmed, saved.getViews());
-    }
-
-    private void enrichEventsWithViews(List<Event> events) {
-        if (events.isEmpty()) return;
-
-        List<String> uris = events.stream()
-                .map(event -> "/events/" + event.getId())
-                .collect(Collectors.toList());
-
-        try {
-            List<ViewStatsDto> stats = statsClient.getStats(
-                    LocalDateTime.now().minusYears(5),
-                    LocalDateTime.now().plusYears(1),
-                    uris,
-                    true
-            );
-
-            Map<String, Long> viewsMap = stats.stream()
-                    .collect(Collectors.toMap(
-                            ViewStatsDto::getUri,
-                            ViewStatsDto::getHits,
-                            (a, b) -> a > b ? a : b
-                    ));
-
-            events.forEach(event -> {
-                Long views = viewsMap.getOrDefault("/events/" + event.getId(), 0L);
-                event.setViews(views);
-            });
-        } catch (Exception e) {
-            System.err.println("Не удалось получить статистику просмотров: " + e.getMessage());
-        }
+        return eventMapper.toFullDto(saved, confirmed, saved.getRating());
     }
 }
