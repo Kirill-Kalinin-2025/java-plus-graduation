@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Component
@@ -19,6 +20,8 @@ public class SimilarityCalculator {
             "REGISTER", 0.8,
             "LIKE", 1.0
     );
+
+    private final Map<Long, Map<Long, Double>> lastSentSimilarities = new ConcurrentHashMap<>();
 
     /**
      * Обновляет веса пользователя для мероприятия и пересчитывает сходства
@@ -80,12 +83,31 @@ public class SimilarityCalculator {
                 similarity = minSum / Math.sqrt(sumA * sumB);
             }
 
-            // Отправляем сходство всегда, когда есть изменения
-            kafkaProducerService.sendSimilarity(eventId, otherEventId, similarity);
-            log.info("Sent similarity: eventA={}, eventB={}, score={}",
-                    Math.min(eventId, otherEventId), Math.max(eventId, otherEventId), similarity);
+            // Отправляем только если сходство изменилось
+            Double lastSimilarity = getLastSimilarity(eventId, otherEventId);
+            if (lastSimilarity == null || Math.abs(lastSimilarity - similarity) > 0.0001) {
+                kafkaProducerService.sendSimilarity(eventId, otherEventId, similarity);
+                saveLastSimilarity(eventId, otherEventId, similarity);
+                log.info("Sent similarity: eventA={}, eventB={}, score={}",
+                        Math.min(eventId, otherEventId), Math.max(eventId, otherEventId), similarity);
+            } else {
+                log.debug("Similarity unchanged for eventA={}, eventB={}, score={}",
+                        eventId, otherEventId, similarity);
+            }
         }
 
         return true;
+    }
+
+    private Double getLastSimilarity(Long eventA, Long eventB) {
+        long first = Math.min(eventA, eventB);
+        long second = Math.max(eventA, eventB);
+        return lastSentSimilarities.getOrDefault(first, Map.of()).get(second);
+    }
+
+    private void saveLastSimilarity(Long eventA, Long eventB, Double similarity) {
+        long first = Math.min(eventA, eventB);
+        long second = Math.max(eventA, eventB);
+        lastSentSimilarities.computeIfAbsent(first, k -> new ConcurrentHashMap<>()).put(second, similarity);
     }
 }
