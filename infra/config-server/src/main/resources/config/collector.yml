@@ -5,12 +5,12 @@ spring:
   application:
     name: collector
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: io.confluent.kafka.serializers.KafkaAvroSerializer
       properties:
-        schema.registry.url: mock://test
+        schema.registry.url: ${SCHEMA_REGISTRY_URL:http://schema-registry:8082}
         auto.register.schemas: true
         retries: 3
         acks: all
@@ -18,11 +18,10 @@ spring:
 grpc:
   server:
     port: 0
-    in-process-name: collector
 
 eureka:
   client:
     service-url:
-      defaultZone: http://${DISCOVERY_HOST:localhost}:8761/eureka/
+      defaultZone: http://${DISCOVERY_HOST:discovery-server}:8761/eureka/
   instance:
     prefer-ip-address: true

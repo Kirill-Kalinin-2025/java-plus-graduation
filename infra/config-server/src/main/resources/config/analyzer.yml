@@ -8,24 +8,24 @@ grpc:
 spring:
   datasource:
     driverClassName: org.postgresql.Driver
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/analyzer}
-    username: practicum
-    password: practicum
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://analyzer-db:5432/analyzer}
+    username: ${SPRING_DATASOURCE_USERNAME:practicum}
+    password: ${SPRING_DATASOURCE_PASSWORD:practicum}
   jpa:
     hibernate:
       ddl-auto: update
     show-sql: true
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
     consumer:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: io.confluent.kafka.serializers.KafkaAvroDeserializer
       properties:
-        schema.registry.url: mock://test
+        schema.registry.url: ${SCHEMA_REGISTRY_URL:http://schema-registry:8082}
         specific.avro.reader: true
         auto.register.schemas: true
 
 eureka:
   client:
     service-url:
-      defaultZone: http://${DISCOVERY_HOST:localhost}:8761/eureka/
+      defaultZone: http://${DISCOVERY_HOST:discovery-server}:8761/eureka/
