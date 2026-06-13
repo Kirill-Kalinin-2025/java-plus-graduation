@@ -1,6 +1,5 @@
 package ru.practicum.aggregator;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -17,8 +16,6 @@ public class KafkaConsumerService {
 
     private final AggregationStores stores;
     private final SimilarityCalculator similarityCalculator;
-    private final ObjectMapper objectMapper = new ObjectMapper()
-            .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
 
     private static final Map<String, Double> ACTION_WEIGHTS = Map.of(
             "VIEW", 0.4,
@@ -27,23 +24,18 @@ public class KafkaConsumerService {
     );
 
     @KafkaListener(topics = "stats.user-actions.v1", groupId = "aggregator")
-    public void consume(ConsumerRecord<String, String> record) {
-        try {
-            String json = record.value();
-            UserActionAvro action = objectMapper.readValue(json, UserActionAvro.class);
-            log.info("Received action: userId={}, eventId={}, type={}", action.getUserId(), action.getEventId(), action.getActionType());
+    public void consume(ConsumerRecord<String, UserActionAvro> record) {
+        UserActionAvro action = record.value();
+        log.info("Received action: userId={}, eventId={}, type={}", action.getUserId(), action.getEventId(), action.getActionType());
 
-            long eventId = action.getEventId();
-            long userId = action.getUserId();
-            double newWeight = ACTION_WEIGHTS.getOrDefault(action.getActionType().name(), 0.4);
-            Double oldWeight = stores.getWeight(eventId, userId);
+        long eventId = action.getEventId();
+        long userId = action.getUserId();
+        double newWeight = ACTION_WEIGHTS.getOrDefault(action.getActionType().name(), 0.4);
+        Double oldWeight = stores.getWeight(eventId, userId);
 
-            if (oldWeight == null || newWeight > oldWeight) {
-                stores.putWeight(eventId, userId, newWeight);
-                similarityCalculator.recalculateSimilarities(eventId);
-            }
-        } catch (Exception e) {
-            log.error("Failed to process message", e);
+        if (oldWeight == null || newWeight > oldWeight) {
+            stores.putWeight(eventId, userId, newWeight);
+            similarityCalculator.recalculateSimilarities(eventId);
         }
     }
 }

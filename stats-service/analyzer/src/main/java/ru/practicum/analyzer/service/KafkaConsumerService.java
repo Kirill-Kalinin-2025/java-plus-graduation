@@ -1,6 +1,5 @@
 package ru.practicum.analyzer.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -21,61 +20,49 @@ public class KafkaConsumerService {
 
     private final UserActionRepository userActionRepository;
     private final EventSimilarityRepository eventSimilarityRepository;
-    private final ObjectMapper objectMapper = new ObjectMapper()
-            .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
 
     @KafkaListener(topics = "stats.user-actions.v1", groupId = "analyzer-user-actions", containerFactory = "userActionListenerFactory")
-    public void consumeUserAction(String message) {
-        try {
-            UserActionAvro action = objectMapper.readValue(message, UserActionAvro.class);
-            log.info("Analyzer received user action: userId={}, eventId={}", action.getUserId(), action.getEventId());
+    public void consumeUserAction(UserActionAvro action) {
+        log.info("Analyzer received user action: userId={}, eventId={}", action.getUserId(), action.getEventId());
 
-            double weight = switch (action.getActionType()) {
-                case VIEW -> 0.4;
-                case REGISTER -> 0.8;
-                case LIKE -> 1.0;
-            };
+        double weight = switch (action.getActionType()) {
+            case VIEW -> 0.4;
+            case REGISTER -> 0.8;
+            case LIKE -> 1.0;
+        };
 
-            Optional<UserAction> existing = userActionRepository
-                    .findByUserId(action.getUserId()).stream()
-                    .filter(ua -> ua.getEventId().equals(action.getEventId()))
-                    .findFirst();
+        Optional<UserAction> existing = userActionRepository
+                .findByUserId(action.getUserId()).stream()
+                .filter(ua -> ua.getEventId().equals(action.getEventId()))
+                .findFirst();
 
-            if (existing.isPresent()) {
-                if (weight > existing.get().getMaxWeight()) {
-                    existing.get().setMaxWeight(weight);
-                    existing.get().setTimestamp(action.getTimestamp());
-                    userActionRepository.save(existing.get());
-                }
-            } else {
-                UserAction ua = UserAction.builder()
-                        .userId(action.getUserId())
-                        .eventId(action.getEventId())
-                        .maxWeight(weight)
-                        .timestamp(action.getTimestamp())
-                        .build();
-                userActionRepository.save(ua);
+        if (existing.isPresent()) {
+            if (weight > existing.get().getMaxWeight()) {
+                existing.get().setMaxWeight(weight);
+                existing.get().setTimestamp(action.getTimestamp());
+                userActionRepository.save(existing.get());
             }
-        } catch (Exception e) {
-            log.error("Failed to process user action", e);
+        } else {
+            UserAction ua = UserAction.builder()
+                    .userId(action.getUserId())
+                    .eventId(action.getEventId())
+                    .maxWeight(weight)
+                    .timestamp(action.getTimestamp())
+                    .build();
+            userActionRepository.save(ua);
         }
     }
 
     @KafkaListener(topics = "stats.events-similarity.v1", groupId = "analyzer-similarity", containerFactory = "eventSimilarityListenerFactory")
-    public void consumeSimilarity(String message) {
-        try {
-            EventSimilarityAvro similarity = objectMapper.readValue(message, EventSimilarityAvro.class);
-            log.info("Analyzer received similarity: eventA={}, eventB={}, score={}", similarity.getEventA(), similarity.getEventB(), similarity.getScore());
+    public void consumeSimilarity(EventSimilarityAvro similarity) {
+        log.info("Analyzer received similarity: eventA={}, eventB={}, score={}", similarity.getEventA(), similarity.getEventB(), similarity.getScore());
 
-            EventSimilarity es = EventSimilarity.builder()
-                    .eventA(similarity.getEventA())
-                    .eventB(similarity.getEventB())
-                    .score(similarity.getScore())
-                    .timestamp(similarity.getTimestamp())
-                    .build();
-            eventSimilarityRepository.save(es);
-        } catch (Exception e) {
-            log.error("Failed to process similarity", e);
-        }
+        EventSimilarity es = EventSimilarity.builder()
+                .eventA(similarity.getEventA())
+                .eventB(similarity.getEventB())
+                .score(similarity.getScore())
+                .timestamp(similarity.getTimestamp())
+                .build();
+        eventSimilarityRepository.save(es);
     }
 }
