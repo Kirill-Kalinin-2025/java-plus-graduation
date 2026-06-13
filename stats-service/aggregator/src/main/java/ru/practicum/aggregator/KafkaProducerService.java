@@ -21,11 +21,8 @@ public class KafkaProducerService {
     private final KafkaTemplate<String, byte[]> kafkaTemplate;
     private static final String TOPIC = "stats.events-similarity.v1";
 
-    public void sendSimilarity(Long eventAId, Long eventBId, double score) {
+    public void sendSimilarity(Long eventA, Long eventB, double score) {
         try {
-            long eventA = Math.min(eventAId, eventBId);
-            long eventB = Math.max(eventAId, eventBId);
-
             EventSimilarityAvro avro = EventSimilarityAvro.newBuilder()
                     .setEventA(eventA)
                     .setEventB(eventB)

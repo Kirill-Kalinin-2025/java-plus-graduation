@@ -5,7 +5,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Component
@@ -21,92 +20,56 @@ public class SimilarityCalculator {
             "LIKE", 1.0
     );
 
-    private final Map<Long, Map<Long, Double>> lastSentSimilarities = new ConcurrentHashMap<>();
-
-    public boolean updateUserWeightAndRecalculate(Long eventId, Long userId, String actionType) {
+    public void processAction(Long eventId, Long userId, String actionType) {
         double newWeight = ACTION_WEIGHTS.getOrDefault(actionType, 0.4);
-        Double oldWeight = stores.getWeight(eventId, userId);
+        double oldWeight = stores.getUserWeightForEvent(userId, eventId);
 
-        // Если вес не изменился (новый вес не больше старого), ничего не делаем
-        if (oldWeight != null && newWeight <= oldWeight) {
-            log.debug("Weight not changed for eventId={}, userId={}, oldWeight={}, newWeight={}",
-                    eventId, userId, oldWeight, newWeight);
-            return false;
+        log.info("Processing: userId={}, eventId={}, type={}, weight={}",
+                userId, eventId, actionType, newWeight);
+
+        // Если новый вес не больше старого, пропускаем
+        if (newWeight <= oldWeight) {
+            log.info("Skipping: newWeight={} <= oldWeight={}", newWeight, oldWeight);
+            return;
         }
 
         // Обновляем вес пользователя для мероприятия
-        stores.putWeight(eventId, userId, newWeight);
-        log.info("Updated weight for eventId={}, userId={}, oldWeight={}, newWeight={}",
-                eventId, userId, oldWeight, newWeight);
+        stores.putUserWeight(userId, eventId, newWeight);
 
-        // Пересчитываем сумму весов для eventId
-        Map<Long, Double> usersForEvent = stores.getUserWeights().get(eventId);
-        double sumA = usersForEvent.values().stream().mapToDouble(Double::doubleValue).sum();
-        stores.putEventWeightSum(eventId, sumA);
+        // Обновляем сумму весов мероприятия (дельта)
+        double deltaSum = newWeight - oldWeight;
+        stores.addToEventSum(eventId, deltaSum);
 
-        // Пересчитываем сходство только для пар (eventId, otherEvent),
-        // где у otherEvent тоже есть пользователи
-        for (Map.Entry<Long, Map<Long, Double>> entry : stores.getUserWeights().entrySet()) {
+        // Получаем все мероприятия пользователя
+        Map<Long, Double> userEvents = stores.getUserWeights(userId);
+
+        // Пересчитываем сходство с другими мероприятиями пользователя
+        for (Map.Entry<Long, Double> entry : userEvents.entrySet()) {
             Long otherEventId = entry.getKey();
+            if (otherEventId.equals(eventId)) continue;
 
-            // Пропускаем само себя
-            if (otherEventId.equals(eventId)) {
-                continue;
-            }
+            double otherWeight = entry.getValue();
 
-            Map<Long, Double> usersForOther = entry.getValue();
+            double oldMin = Math.min(oldWeight, otherWeight);
+            double newMin = Math.min(newWeight, otherWeight);
+            double deltaMin = newMin - oldMin;
 
-            // Пересчитываем S_min для пары с учётом нового веса пользователя
-            double minSum = 0.0;
-            for (Map.Entry<Long, Double> userEntry : usersForEvent.entrySet()) {
-                Long uid = userEntry.getKey();
-                Double weightA = userEntry.getValue();
-                Double weightB = usersForOther.get(uid);
-                if (weightB != null) {
-                    minSum += Math.min(weightA, weightB);
-                }
-            }
+            // Обновляем минимальную сумму
+            stores.addToMinSum(eventId, otherEventId, deltaMin);
 
-            // Сохраняем S_min
-            stores.putMinWeightSum(eventId, otherEventId, minSum);
+            long first = Math.min(eventId, otherEventId);
+            long second = Math.max(eventId, otherEventId);
 
-            // Получаем сумму весов для otherEvent
-            double sumB = usersForOther.values().stream().mapToDouble(Double::doubleValue).sum();
-            stores.putEventWeightSum(otherEventId, sumB);
+            double minSum = stores.getMinSum(eventId, otherEventId);
+            double sumA = stores.getEventSum(first);
+            double sumB = stores.getEventSum(second);
+            double similarity = minSum / (Math.sqrt(sumA) * Math.sqrt(sumB));
 
-            // Вычисляем косинусное сходство
-            double similarity = 0.0;
-            if (sumA > 0 && sumB > 0 && minSum > 0) {
-                similarity = minSum / Math.sqrt(sumA * sumB);
-            }
+            double roundedSimilarity = Math.round(similarity * 1000000.0) / 1000000.0;
 
-            // Отправляем только для eventId < otherEventId (избегаем дублирования)
-            if (eventId < otherEventId) {
-                Double lastSimilarity = getLastSimilarity(eventId, otherEventId);
-                if ((lastSimilarity == null || Math.abs(lastSimilarity - similarity) > 0.0001) && similarity > 0.0) {
-                    kafkaProducerService.sendSimilarity(eventId, otherEventId, similarity);
-                    saveLastSimilarity(eventId, otherEventId, similarity);
-                    log.info("Sent similarity: eventA={}, eventB={}, score={}",
-                            Math.min(eventId, otherEventId), Math.max(eventId, otherEventId), similarity);
-                } else {
-                    log.debug("Similarity unchanged or zero for eventA={}, eventB={}, score={}",
-                            eventId, otherEventId, similarity);
-                }
-            }
+            log.info("Updating pair ({},{}): deltaMin={}, similarity={}", first, second, deltaMin, roundedSimilarity);
+
+            kafkaProducerService.sendSimilarity(first, second, roundedSimilarity);
         }
-
-        return true;
-    }
-
-    private Double getLastSimilarity(Long eventA, Long eventB) {
-        long first = Math.min(eventA, eventB);
-        long second = Math.max(eventA, eventB);
-        return lastSentSimilarities.getOrDefault(first, Map.of()).get(second);
-    }
-
-    private void saveLastSimilarity(Long eventA, Long eventB, Double similarity) {
-        long first = Math.min(eventA, eventB);
-        long second = Math.max(eventA, eventB);
-        lastSentSimilarities.computeIfAbsent(first, k -> new ConcurrentHashMap<>()).put(second, similarity);
     }
 }

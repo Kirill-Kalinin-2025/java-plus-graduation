@@ -1,54 +1,52 @@
 package ru.practicum.aggregator;
 
-import lombok.Getter;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 public class AggregationStores {
 
-    @Getter
-    private final Map<Long, Map<Long, Double>> userWeights = new ConcurrentHashMap<>();
-    private final Map<Long, Double> eventWeightSums = new ConcurrentHashMap<>();
-    private final Map<Long, Map<Long, Double>> minWeightsSums = new ConcurrentHashMap<>();
+    // userId -> (eventId -> maxWeight)
+    private final Map<Long, Map<Long, Double>> userMaxWeights = new ConcurrentHashMap<>();
 
-    public Double getWeight(Long eventId, Long userId) {
-        return userWeights.getOrDefault(eventId, Map.of()).get(userId);
+    // (eventA, eventB) -> minSum, где eventA < eventB
+    private final Map<Long, Map<Long, Double>> minSums = new ConcurrentHashMap<>();
+
+    // eventId -> сумма всех весов
+    private final Map<Long, Double> eventSums = new ConcurrentHashMap<>();
+
+    public Map<Long, Double> getUserWeights(Long userId) {
+        return userMaxWeights.getOrDefault(userId, Map.of());
     }
 
-    public void putWeight(Long eventId, Long userId, Double weight) {
-        userWeights.computeIfAbsent(eventId, k -> new ConcurrentHashMap<>()).put(userId, weight);
+    public Double getUserWeightForEvent(Long userId, Long eventId) {
+        return userMaxWeights.getOrDefault(userId, Map.of()).getOrDefault(eventId, 0.0);
     }
 
-    public Double getEventWeightSum(Long eventId) {
-        return eventWeightSums.getOrDefault(eventId, 0.0);
+    public void putUserWeight(Long userId, Long eventId, Double weight) {
+        userMaxWeights.computeIfAbsent(userId, k -> new ConcurrentHashMap<>()).put(eventId, weight);
     }
 
-    public void putEventWeightSum(Long eventId, Double sum) {
-        eventWeightSums.put(eventId, sum);
+    public void addToEventSum(Long eventId, Double delta) {
+        eventSums.merge(eventId, delta, Double::sum);
     }
 
-    public Double getMinWeightSum(Long eventA, Long eventB) {
+    public Double getEventSum(Long eventId) {
+        return eventSums.getOrDefault(eventId, 0.0);
+    }
+
+    public void addToMinSum(Long eventA, Long eventB, Double delta) {
         long first = Math.min(eventA, eventB);
         long second = Math.max(eventA, eventB);
-        return minWeightsSums.getOrDefault(first, Map.of()).getOrDefault(second, 0.0);
+        minSums.computeIfAbsent(first, k -> new ConcurrentHashMap<>())
+                .merge(second, delta, Double::sum);
     }
 
-    public void putMinWeightSum(Long eventA, Long eventB, Double sum) {
+    public Double getMinSum(Long eventA, Long eventB) {
         long first = Math.min(eventA, eventB);
         long second = Math.max(eventA, eventB);
-        minWeightsSums.computeIfAbsent(first, k -> new ConcurrentHashMap<>()).put(second, sum);
-    }
-
-    public Map<Long, Map<Long, Double>> getMinWeightsSums() {
-        return minWeightsSums;
-    }
-
-    // Добавляем метод для получения всех мероприятий
-    public Set<Long> getAllEventIds() {
-        return userWeights.keySet();
+        return minSums.getOrDefault(first, Map.of()).getOrDefault(second, 0.0);
     }
 }

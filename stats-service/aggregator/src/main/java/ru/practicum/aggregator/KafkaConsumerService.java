@@ -30,7 +30,7 @@ public class KafkaConsumerService {
             log.info("Received action: userId={}, eventId={}, type={}",
                     action.getUserId(), action.getEventId(), action.getActionType());
 
-            similarityCalculator.updateUserWeightAndRecalculate(
+            similarityCalculator.processAction(
                     action.getEventId(),
                     action.getUserId(),
                     action.getActionType().name()
