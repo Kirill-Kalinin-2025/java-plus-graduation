@@ -23,9 +23,6 @@ public class SimilarityCalculator {
 
     private final Map<Long, Map<Long, Double>> lastSentSimilarities = new ConcurrentHashMap<>();
 
-    /**
-     * Обновляет веса пользователя для мероприятия и пересчитывает сходства
-     */
     public boolean updateUserWeightAndRecalculate(Long eventId, Long userId, String actionType) {
         double newWeight = ACTION_WEIGHTS.getOrDefault(actionType, 0.4);
         Double oldWeight = stores.getWeight(eventId, userId);
@@ -83,15 +80,15 @@ public class SimilarityCalculator {
                 similarity = minSum / Math.sqrt(sumA * sumB);
             }
 
-            // Отправляем только если сходство изменилось
+            // Отправляем только если сходство изменилось и больше нуля
             Double lastSimilarity = getLastSimilarity(eventId, otherEventId);
-            if (lastSimilarity == null || Math.abs(lastSimilarity - similarity) > 0.0001) {
+            if ((lastSimilarity == null || Math.abs(lastSimilarity - similarity) > 0.0001) && similarity > 0.0) {
                 kafkaProducerService.sendSimilarity(eventId, otherEventId, similarity);
                 saveLastSimilarity(eventId, otherEventId, similarity);
                 log.info("Sent similarity: eventA={}, eventB={}, score={}",
                         Math.min(eventId, otherEventId), Math.max(eventId, otherEventId), similarity);
             } else {
-                log.debug("Similarity unchanged for eventA={}, eventB={}, score={}",
+                log.debug("Similarity unchanged or zero for eventA={}, eventB={}, score={}",
                         eventId, otherEventId, similarity);
             }
         }
