@@ -1,11 +1,9 @@
 server:
   port: 0
 
-grpc:
-  server:
-    port: 0
-
 spring:
+  application:
+    name: collector
   kafka:
     bootstrap-servers: localhost:9092
     producer:
@@ -14,7 +12,14 @@ spring:
     properties:
       schema.registry.url: http://localhost:8081
 
+grpc:
+  server:
+    port: 0
+    in-process-name: collector
+
 eureka:
   client:
     service-url:
       defaultZone: http://localhost:8761/eureka/
+  instance:
+    prefer-ip-address: true
