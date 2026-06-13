@@ -17,7 +17,8 @@ public class KafkaConsumerService {
 
     private final AggregationStores stores;
     private final SimilarityCalculator similarityCalculator;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = new ObjectMapper()
+            .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
 
     private static final Map<String, Double> ACTION_WEIGHTS = Map.of(
             "VIEW", 0.4,

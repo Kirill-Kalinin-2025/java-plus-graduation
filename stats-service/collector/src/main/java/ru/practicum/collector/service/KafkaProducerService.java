@@ -17,7 +17,8 @@ import java.time.Instant;
 public class KafkaProducerService {
 
     private final KafkaTemplate<String, String> kafkaTemplate;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = new ObjectMapper()
+            .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
 
     private static final String TOPIC = "stats.user-actions.v1";
 

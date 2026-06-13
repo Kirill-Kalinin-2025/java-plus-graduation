@@ -21,7 +21,8 @@ public class KafkaConsumerService {
 
     private final UserActionRepository userActionRepository;
     private final EventSimilarityRepository eventSimilarityRepository;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = new ObjectMapper()
+            .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
 
     @KafkaListener(topics = "stats.user-actions.v1", groupId = "analyzer-user-actions", containerFactory = "userActionListenerFactory")
     public void consumeUserAction(String message) {
