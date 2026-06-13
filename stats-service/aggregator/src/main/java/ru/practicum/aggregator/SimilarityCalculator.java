@@ -80,16 +80,18 @@ public class SimilarityCalculator {
                 similarity = minSum / Math.sqrt(sumA * sumB);
             }
 
-            // Отправляем только если сходство изменилось и больше нуля
-            Double lastSimilarity = getLastSimilarity(eventId, otherEventId);
-            if ((lastSimilarity == null || Math.abs(lastSimilarity - similarity) > 0.0001) && similarity > 0.0) {
-                kafkaProducerService.sendSimilarity(eventId, otherEventId, similarity);
-                saveLastSimilarity(eventId, otherEventId, similarity);
-                log.info("Sent similarity: eventA={}, eventB={}, score={}",
-                        Math.min(eventId, otherEventId), Math.max(eventId, otherEventId), similarity);
-            } else {
-                log.debug("Similarity unchanged or zero for eventA={}, eventB={}, score={}",
-                        eventId, otherEventId, similarity);
+            // Отправляем только для eventId < otherEventId (избегаем дублирования)
+            if (eventId < otherEventId) {
+                Double lastSimilarity = getLastSimilarity(eventId, otherEventId);
+                if ((lastSimilarity == null || Math.abs(lastSimilarity - similarity) > 0.0001) && similarity > 0.0) {
+                    kafkaProducerService.sendSimilarity(eventId, otherEventId, similarity);
+                    saveLastSimilarity(eventId, otherEventId, similarity);
+                    log.info("Sent similarity: eventA={}, eventB={}, score={}",
+                            Math.min(eventId, otherEventId), Math.max(eventId, otherEventId), similarity);
+                } else {
+                    log.debug("Similarity unchanged or zero for eventA={}, eventB={}, score={}",
+                            eventId, otherEventId, similarity);
+                }
             }
         }
 
