@@ -2,22 +2,27 @@ package ru.practicum.event.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import ru.practicum.event.dto.EventFullDto;
 import ru.practicum.event.dto.EventShortDto;
+import ru.practicum.event.enums.EventState;
+import ru.practicum.event.model.Event;
 import ru.practicum.event.repository.EventRepository;
 import ru.practicum.event.service.EventService;
 import ru.practicum.ewm.stats.proto.ActionTypeProto;
 import ru.practicum.ewm.stats.proto.RecommendedEventProto;
 import ru.practicum.exception.BadRequestException;
 import ru.practicum.exception.NotFoundException;
+import ru.practicum.request.client.RequestClient;
 import ru.practicum.stats.client.AnalyzerClient;
 import ru.practicum.stats.client.CollectorClient;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
+@Slf4j
 @RestController
 @RequestMapping("/events")
 @RequiredArgsConstructor
@@ -27,6 +32,7 @@ public class PublicEventController {
     private final CollectorClient collectorClient;
     private final AnalyzerClient analyzerClient;
     private final EventRepository eventRepository;
+    private final RequestClient requestClient;
 
     @GetMapping("/{id}")
     public EventFullDto get(@PathVariable Long id, HttpServletRequest request) {
@@ -66,10 +72,20 @@ public class PublicEventController {
         if (!eventRepository.existsById(eventId)) {
             throw new NotFoundException("Событие с id=" + eventId + " не найдено");
         }
-        ru.practicum.event.model.Event event = eventRepository.findById(eventId).get();
-        if (event.getState() != ru.practicum.event.enums.EventState.PUBLISHED) {
+
+        Event event = eventRepository.findById(eventId).get();
+        if (event.getState() != EventState.PUBLISHED) {
             throw new BadRequestException("Можно лайкать только опубликованные события");
         }
+
+        // Проверяем, был ли пользователь на мероприятии (имеет CONFIRMED запрос)
+        boolean hasUserRequest = requestClient.existsByEventIdAndRequesterIdAndStatus(
+                eventId, userId, "CONFIRMED");
+
+        if (!hasUserRequest) {
+            throw new BadRequestException("Пользователь может лайкать только мероприятия, на которые он подтвердил участие");
+        }
+
         collectorClient.sendUserAction(userId, eventId, ActionTypeProto.ACTION_LIKE);
     }
 }

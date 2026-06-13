@@ -1,6 +1,7 @@
 package ru.practicum.event.service;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -19,11 +20,16 @@ import ru.practicum.exception.NotFoundException;
 import ru.practicum.request.client.RequestClient;
 import ru.practicum.user.client.UserClient;
 import ru.practicum.user.dto.UserDto;
+import ru.practicum.ewm.stats.proto.RecommendedEventProto;
+import ru.practicum.stats.client.AnalyzerClient;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -34,6 +40,7 @@ public class EventService {
     private final CategoryClient categoryClient;
     private final RequestClient requestClient;
     private final EventMapper eventMapper;
+    private final AnalyzerClient analyzerClient;
 
     @Transactional
     public EventFullDto create(Long userId, NewEventDto dto) {
@@ -147,10 +154,19 @@ public class EventService {
         Page<Event> eventPage = eventRepository.searchPublic(text, categories, paid, rangeStart, rangeEnd, pageable);
         List<Event> events = eventPage.getContent();
 
+        if (events.isEmpty()) {
+            return List.of();
+        }
+
+        // Получаем рейтинги всех мероприятий из Analyzer
+        List<Long> eventIds = events.stream().map(Event::getId).collect(Collectors.toList());
+        Map<Long, Double> ratings = getRatingsFromAnalyzer(eventIds);
+
         return events.stream()
                 .map(event -> {
                     Long confirmed = requestClient.countByEventIdAndStatus(event.getId(), "CONFIRMED");
-                    return eventMapper.toShortDto(event, confirmed, event.getRating());
+                    Double rating = ratings.getOrDefault(event.getId(), 0.0);
+                    return eventMapper.toShortDto(event, confirmed, rating);
                 })
                 .collect(Collectors.toList());
     }
@@ -164,7 +180,43 @@ public class EventService {
         }
 
         Long confirmed = requestClient.countByEventIdAndStatus(event.getId(), "CONFIRMED");
-        return eventMapper.toFullDto(event, confirmed, event.getRating());
+
+        // Получаем рейтинг из Analyzer
+        Double rating = getRatingFromAnalyzer(eventId);
+
+        return eventMapper.toFullDto(event, confirmed, rating);
+    }
+
+    /**
+     * Получает рейтинг одного мероприятия из Analyzer
+     */
+    private Double getRatingFromAnalyzer(Long eventId) {
+        try {
+            return analyzerClient.getInteractionsCount(List.of(eventId))
+                    .findFirst()
+                    .map(RecommendedEventProto::getScore)
+                    .orElse(0.0);
+        } catch (Exception e) {
+            log.error("Failed to get rating for event {} from analyzer", eventId, e);
+            return 0.0;
+        }
+    }
+
+    /**
+     * Получает рейтинги нескольких мероприятий из Analyzer
+     */
+    private Map<Long, Double> getRatingsFromAnalyzer(List<Long> eventIds) {
+        try {
+            return analyzerClient.getInteractionsCount(eventIds)
+                    .collect(Collectors.toMap(
+                            RecommendedEventProto::getEventId,
+                            RecommendedEventProto::getScore,
+                            (v1, v2) -> v1
+                    ));
+        } catch (Exception e) {
+            log.error("Failed to get ratings for events {} from analyzer", eventIds, e);
+            return new HashMap<>();
+        }
     }
 
     public List<EventFullDto> searchAdmin(List<Long> users, List<EventState> states, List<Long> categories,

@@ -35,4 +35,13 @@ public class InternalRequestController {
     public Long countByEventIdAndStatus(@PathVariable Long eventId, @RequestParam("status") String status) {
         return requestRepository.countByEventIdAndStatus(eventId, RequestStatus.valueOf(status));
     }
+
+    @GetMapping("/exists")
+    public Boolean existsByEventIdAndRequesterIdAndStatus(
+            @RequestParam Long eventId,
+            @RequestParam Long userId,
+            @RequestParam String status) {
+        return requestRepository.existsByEventIdAndRequesterIdAndStatus(
+                eventId, userId, RequestStatus.valueOf(status));
+    }
 }

@@ -26,4 +26,9 @@ public class RequestClientFallback implements RequestClient {
     public Long countByEventIdAndStatus(Long eventId, String status) {
         return 0L;
     }
+
+    @Override
+    public Boolean existsByEventIdAndRequesterIdAndStatus(Long eventId, Long userId, String status) {
+        return false;
+    }
 }
