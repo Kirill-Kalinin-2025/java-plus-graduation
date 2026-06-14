@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.practicum.event.client.EventClient;
+import ru.practicum.ewm.stats.proto.ActionTypeProto;
 import ru.practicum.exception.ConflictException;
 import ru.practicum.exception.NotFoundException;
 import ru.practicum.request.dto.EventRequestStatusUpdateRequest;
@@ -12,6 +13,7 @@ import ru.practicum.request.dto.ParticipationRequestDto;
 import ru.practicum.request.model.ParticipationRequest;
 import ru.practicum.request.model.RequestStatus;
 import ru.practicum.request.repository.RequestRepository;
+import ru.practicum.stats.client.CollectorClient;
 import ru.practicum.user.client.UserClient;
 
 import java.time.LocalDateTime;
@@ -27,6 +29,7 @@ public class RequestServiceImpl implements RequestService {
     private final RequestRepository requestRepository;
     private final UserClient userClient;
     private final EventClient eventClient;
+    private final CollectorClient collectorClient;
 
     @Transactional
     @Override
@@ -65,7 +68,9 @@ public class RequestServiceImpl implements RequestService {
             request.setStatus(RequestStatus.PENDING);
         }
 
-        return toDto(requestRepository.save(request));
+        ParticipationRequest saved = requestRepository.save(request);
+        collectorClient.sendUserAction(userId, eventId, ActionTypeProto.ACTION_REGISTER);
+        return toDto(saved);
     }
 
     @Override

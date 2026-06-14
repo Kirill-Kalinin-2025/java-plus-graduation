@@ -21,4 +21,10 @@ public interface RequestClient {
 
     @GetMapping("/internal/requests/event/{eventId}/count")
     Long countByEventIdAndStatus(@PathVariable Long eventId, @RequestParam("status") String status);
+
+    @GetMapping("/internal/requests/exists")
+    Boolean existsByEventIdAndRequesterIdAndStatus(
+            @RequestParam("eventId") Long eventId,
+            @RequestParam("userId") Long userId,
+            @RequestParam("status") String status);
 }

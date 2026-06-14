@@ -1,0 +1,25 @@
+server:
+  port: 0
+
+spring:
+  application:
+    name: collector
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.ByteArraySerializer
+      properties:
+        retries: 3
+        acks: all
+
+grpc:
+  server:
+    port: 0
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://${DISCOVERY_HOST:localhost}:8761/eureka/
+  instance:
+    prefer-ip-address: true

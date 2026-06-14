@@ -1,8 +1,8 @@
 ## 🚀 Explore With Me — микросервисная архитектура
 
-Проект представляет собой переработанную версию монолитного приложения "Explore With Me", 
-разбитую на микросервисы для повышения масштабируемости, гибкости и удобства поддержки. 
-Каждый микросервис отвечает за определённую бизнес-область и взаимодействует с другими через 
+Проект представляет собой переработанную версию монолитного приложения "Explore With Me",
+разбитую на микросервисы для повышения масштабируемости, гибкости и удобства поддержки.
+Каждый микросервис отвечает за определённую бизнес-область и взаимодействует с другими через
 внутренние REST API с использованием OpenFeign.
 
 > Приложение позволяет пользователям делиться информацией об интересных событиях и находить компанию для участия в них.
@@ -30,18 +30,54 @@
 | `discovery-server` (Eureka) | Сервис обнаружения и регистрации микросервисов |
 | `gateway-server` | Единая точка входа для внешних клиентов (порт 8080), маршрутизация запросов |
 
-### Сервис статистики (stats-service)
+### Сервис статистики и рекомендаций (stats-service)
 
 | Модуль | Назначение |
 |--------|-----------|
 | `stats-server` | Сбор и предоставление статистики просмотров событий |
-| `stats-client` | Клиент для взаимодействия со stats-server (используется другими микросервисами) |
+| `stats-client` | Клиенты для взаимодействия: gRPC (Collector, Analyzer) и REST (Stats) |
 | `stats-dto` | Общие DTO для статистики |
+| `stats-proto` | Protobuf-схемы (gRPC) для Collector и Analyzer |
+| `stats-avro` | Avro-схемы для Kafka-сообщений |
+
+## Рекомендательная система (на основе Apache Kafka)
+
+| Сервис | Назначение |
+|--------|-----------|
+| `collector` | Принимает gRPC-сообщения о действиях пользователей, сериализует в Avro (бинарный формат) и отправляет в Kafka `stats.user-actions.v1` |
+| `aggregator` | Читает действия из Kafka (десериализация Avro), вычисляет косинусное сходство мероприятий через дельты весов, отправляет результат в `stats.events-similarity.v1` |
+| `analyzer` | Читает оба топика Kafka, обновляет PostgreSQL (таблицы `user_actions`, `event_similarities`), предоставляет gRPC API для рекомендаций |
+
+### Поток данных
+
+1. **Core-сервисы** (`event-service`, `request-service`) отправляют gRPC-запросы в `collector`
+2. `collector` → Kafka `stats.user-actions.v1`
+3. `aggregator` читает действия, вычисляет сходство → Kafka `stats.events-similarity.v1`
+4. `analyzer` читает оба топика, сохраняет в PostgreSQL, отвечает на gRPC-запросы рекомендаций
+
+### Алгоритм рекомендаций
+
+- **Косинусное сходство** между событиями A и B: `S_min(A,B) / sqrt(S_A × S_B)`, где S_A, S_B — суммы весов действий пользователей, S_min — сумма минимальных весов общих пользователей
+- **Веса действий:** `VIEW = 0.4`, `REGISTER = 0.8`, `LIKE = 1.0`
+- **Обновление через дельты:** вместо полного пересчёта всех сумм при каждом действии используется инкрементальный подход (прирост сумм)
+- **Рекомендации для пользователя:** выбор недавних событий → поиск похожих → предсказание оценки через взвешенное косинусное сходство
+
+### Сериализация
+
+- Avro-сообщения сериализуются напрямую через `SpecificDatumWriter`/`SpecificDatumReader` в байтовый массив
+- Транспорт через Kafka: `ByteArraySerializer`/`ByteArrayDeserializer`
+- Schema Registry не требуется — схемы встроены в JAR-файлы
+
+### API рекомендаций (gRPC)
+
+- `GetRecommendationsForUser` — персональные рекомендации
+- `GetSimilarEvents` — похожие события (исключая уже просмотренные)
+- `GetInteractionsCount` — суммарный вес взаимодействий для указанных событий
 ---
 
-## Внутреннее API
+## Внутреннее API (REST)
 
-Взаимодействие между микросервисами осуществляется через **OpenFeign** с использованием **Eureka** для обнаружения сервисов. Для повышения отказоустойчивости реализованы **fallback-методы** и настроен **Resilience4j** (Circuit Breaker + Retry).
+Взаимодействие между core-микросервисами осуществляется через **OpenFeign** с использованием **Eureka** для обнаружения сервисов. Для повышения отказоустойчивости реализованы **fallback-методы** и настроен **Resilience4j** (Circuit Breaker + Retry).
 
 ### event-service вызывает другие сервисы
 
@@ -109,10 +145,33 @@
 
 ---
 
+## Внутреннее API (gRPC — рекомендательная система)
+
+### Collector
+
+**UserActionController.CollectUserAction**
+- Вход: `UserActionProto` (user_id, event_id, action_type, timestamp)
+- Выход: `Empty`
+
+### Analyzer
+
+**RecommendationsController.GetRecommendationsForUser**
+- Вход: `UserPredictionsRequestProto` (user_id, max_results)
+- Выход: поток `RecommendedEventProto` (event_id, score — предсказанная оценка)
+
+**RecommendationsController.GetSimilarEvents**
+- Вход: `SimilarEventsRequestProto` (event_id, user_id, max_results)
+- Выход: поток `RecommendedEventProto` (event_id, score — коэффициент сходства)
+
+**RecommendationsController.GetInteractionsCount**
+- Вход: `InteractionsCountRequestProto` (event_id — список)
+- Выход: поток `RecommendedEventProto` (event_id, score — сумма весов)
+
+---
+
 ## Конфигурации
 
 Конфигурации всех микросервисов хранятся в **config-server**:
-
 
 infra/config-server/src/main/resources/config/
 
@@ -128,15 +187,18 @@ infra/config-server/src/main/resources/config/
 
 ├── comment-service.yml
 
-└── stats-server.yml
+├── stats-server.yml
+
+├── collector.yml
+
+├── aggregator.yml
+
+└── analyzer.yml
 
 
-Каждый сервис при старте загружает свою конфигурацию из Config Server. Локальные копии конфигураций также хранятся в `core/<service>/src/main/resources/config/` в качестве резервного варианта.  
+Каждый сервис при старте загружает свою конфигурацию из Config Server. Локальные копии конфигураций также хранятся в `core/<service>/src/main/resources/config/` в качестве резервного варианта.
 
 ---
-
-
-
 
 ## Внешнее API
 
@@ -148,6 +210,11 @@ infra/config-server/src/main/resources/config/
 **Сервис статистики (stats-service):**
 [ewm-stats-service-spec.json](https://raw.githubusercontent.com/yandex-praktikum/java-explore-with-me/refs/heads/main/ewm-stats-service-spec.json)
 
+### Новые эндпоинты (рекомендации)
+
+`GET /events/recommendations` — рекомендации мероприятий для пользователя (заголовок `X-EWM-USER-ID`)
+
+`PUT /events/{eventId}/like` — лайк мероприятия (заголовок `X-EWM-USER-ID`)
 
 ---
 
@@ -169,16 +236,20 @@ infra/config-server/src/main/resources/config/
 
 ## Запуск
 
-1. Запустить `discovery-server` (Eureka, порт 8761)
-2. Запустить `config-server` (порт 8888)
-3. Запустить микросервисы в любом порядке:
-  - `event-service`
-  - `category-service`
-  - `user-service`
-  - `request-service`
-  - `compilation-service`
-  - `comment-service`
-  - `stats-server`
-4. Запустить `gateway-server` (порт 8080) — единая точка входа
+1. Запустить `docker-compose up` — поднимутся PostgreSQL, Zookeeper и Kafka
+2. Запустить `discovery-server` (Eureka, порт 8761)
+3. Запустить `config-server` (порт 8888)
+4. Запустить микросервисы в любом порядке:
+    - `event-service`
+    - `category-service`
+    - `user-service`
+    - `request-service`
+    - `compilation-service`
+    - `comment-service`
+    - `stats-server`
+    - `collector`
+    - `aggregator`
+    - `analyzer`
+5. Запустить `gateway-server` (порт 8080) — единая точка входа
 
 Все сервисы автоматически регистрируются в Eureka и получают конфигурации из Config Server.

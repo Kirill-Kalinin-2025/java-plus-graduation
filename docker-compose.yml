@@ -1,17 +1,174 @@
 services:
   stats-server:
+    build:
+      context: stats-service/server
+      dockerfile: Dockerfile
     ports:
       - "9090:9090"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://stats-db:5432/stats
+      - SPRING_DATASOURCE_USERNAME=practicum
+      - SPRING_DATASOURCE_PASSWORD=practicum
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://discovery-server:8761/eureka/
+      - SPRING_CLOUD_CONFIG_DISCOVERY_ENABLED=true
+      - SPRING_CLOUD_CONFIG_DISCOVERY_SERVICEID=config-server
+    depends_on:
+      - stats-db
+      - discovery-server
+      - config-server
 
   stats-db:
     image: postgres:16.1
+    environment:
+      - POSTGRES_DB=stats
+      - POSTGRES_USER=practicum
+      - POSTGRES_PASSWORD=practicum
+    ports:
+      - "5433:5432"
 
-  main-service:
-    image: main-service
+  analyzer-db:
+    image: postgres:16.1
+    environment:
+      - POSTGRES_DB=analyzer
+      - POSTGRES_USER=practicum
+      - POSTGRES_PASSWORD=practicum
+    ports:
+      - "5434:5432"
 
   main-db:
     image: postgres:16.1
+    environment:
+      - POSTGRES_DB=ewm
+      - POSTGRES_USER=practicum
+      - POSTGRES_PASSWORD=practicum
+    ports:
+      - "5435:5432"
+
+  discovery-server:
+    build:
+      context: infra/discovery-server
+      dockerfile: Dockerfile
+    ports:
+      - "8761:8761"
+
+  config-server:
+    build:
+      context: infra/config-server
+      dockerfile: Dockerfile
+    ports:
+      - "8888:8888"
+    environment:
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://discovery-server:8761/eureka/
+    depends_on:
+      - discovery-server
 
   gateway-server:
+    build:
+      context: infra/gateway-server
+      dockerfile: Dockerfile
     ports:
       - "8080:8080"
+    environment:
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://discovery-server:8761/eureka/
+    depends_on:
+      - discovery-server
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.4
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: confluentinc/cp-kafka:7.4.4
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.4.4
+    depends_on:
+      - kafka
+    ports:
+      - "8082:8082"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka:9092
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8082
+
+  kafka-init:
+    image: confluentinc/cp-kafka:7.4.4
+    depends_on:
+      - kafka
+      - schema-registry
+    entrypoint: /bin/sh -c "
+      echo 'Waiting for Kafka to be ready...';
+      cub kafka-ready -b kafka:9092 1 20;
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic stats.user-actions.v1 --partitions 3 --replication-factor 1;
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic stats.events-similarity.v1 --partitions 3 --replication-factor 1;
+      echo 'Topics created successfully';
+      exit 0;
+      "
+
+  collector:
+    build:
+      context: stats-service/collector
+      dockerfile: Dockerfile
+    depends_on:
+      - kafka
+      - schema-registry
+      - discovery-server
+      - config-server
+      - kafka-init
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - SCHEMA_REGISTRY_URL=http://schema-registry:8082
+      - DISCOVERY_HOST=discovery-server
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://discovery-server:8761/eureka/
+
+  aggregator:
+    build:
+      context: stats-service/aggregator
+      dockerfile: Dockerfile
+    depends_on:
+      - kafka
+      - schema-registry
+      - discovery-server
+      - config-server
+      - kafka-init
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - SCHEMA_REGISTRY_URL=http://schema-registry:8082
+      - DISCOVERY_HOST=discovery-server
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://discovery-server:8761/eureka/
+
+  analyzer:
+    build:
+      context: stats-service/analyzer
+      dockerfile: Dockerfile
+    depends_on:
+      - kafka
+      - schema-registry
+      - discovery-server
+      - config-server
+      - analyzer-db
+      - kafka-init
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - SCHEMA_REGISTRY_URL=http://schema-registry:8082
+      - DISCOVERY_HOST=discovery-server
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://discovery-server:8761/eureka/
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://analyzer-db:5432/analyzer
+      - SPRING_DATASOURCE_USERNAME=practicum
+      - SPRING_DATASOURCE_PASSWORD=practicum

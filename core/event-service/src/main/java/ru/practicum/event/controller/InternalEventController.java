@@ -59,6 +59,6 @@ public class InternalEventController {
     public EventShortDto getEventShort(@PathVariable Long eventId) {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new NotFoundException("Событие с id=" + eventId + " не найдено"));
-        return eventMapper.toShortDto(event, 0L, event.getViews());
+        return eventMapper.toShortDto(event, 0L, event.getRating());
     }
 }
